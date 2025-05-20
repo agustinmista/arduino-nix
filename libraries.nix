@@ -1,28 +1,25 @@
-{ fetchzip, stdenv, lib, libraryIndex, pkgsBuildHost, pkgs, arduinoPackages }:
-
-with builtins;
+{ libraryIndex, pkgs }:
 let
-  inherit (pkgs.callPackage ./lib.nix {}) convertHash;
-    
-  libraries = mapAttrs (name: versions: listToAttrs (map ({version, url, checksum, ...}: {
-    name = version;
-    value = stdenv.mkDerivation {
-      pname = name;
-      inherit version;
+  lib = pkgs.callPackage ./lib.nix { };
 
-      installPhase = ''
-        runHook preInstall
+  librariesByName = builtins.groupBy ({ name, ... }: name) libraryIndex.libraries;
 
-        mkdir -p "$out/libraries/$pname"
-        cp -R * "$out/libraries/$pname/"
-
-        runHook postInstall
-      '';
-      nativeBuildInputs = [ pkgs.unzip ];
-      src = fetchurl ({
-        url = url;
-      } // (convertHash checksum));
-    };
-  }) versions)) (groupBy ({ name, ... }: name) libraryIndex.libraries);
+  libraries = builtins.mapAttrs (
+    name: versions:
+    builtins.listToAttrs (
+      builtins.map (
+        {
+          version,
+          url,
+          checksum,
+          ...
+        }:
+        {
+          name = version;
+          value = lib.mkLibrary name version url checksum;
+        }
+      ) versions
+    )
+  ) librariesByName;
 in
-  libraries
+libraries
